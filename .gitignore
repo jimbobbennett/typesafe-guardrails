@@ -1,0 +1,23 @@
+# Secrets -- never commit real keys. Use .env.example as the template.
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv/
+
+# Tooling
+.ruff_cache/
+
+# Chainlit generated
+.chainlit/translations/
+.files/
+*.log
