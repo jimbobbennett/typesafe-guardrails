@@ -321,24 +321,63 @@ class LlmEngine:
 # --------------------------------------------------------------------------------------
 # Pricing
 #
-# Published list prices per million tokens at the time of writing. These drive the cost
-# column in the CLI summary, so VERIFY THEM against each provider's pricing page before
-# putting a number from this demo on a slide.
+# Published list prices per million tokens, as (input, output). All verified against the
+# vendors' own pricing pages on 2026-09-21.
+#
+# TypeSafe: $0.042 input, output free. That "output free" is not a rounding convenience --
+# it is why the cost gap is structural rather than a pricing quirk. A System One model
+# returns a distribution, so there is barely any output to bill for, and TypeSafe does not
+# bill for it anyway.
+#
+# Note how the LLM rates are shaped: output costs 4-6x input. A guardrail emits structured
+# output on every single call, so it sits on the expensive side of that ratio by design.
+#
+# Cached-input rates exist for the OpenAI models (e.g. $0.02/M for gpt-5.4-nano) but are
+# not modelled here: these calls are short, varied and uncached, so no discount applies.
 # --------------------------------------------------------------------------------------
 
-RATES_PER_MTOK: dict[str, tuple[float, float]] = {
-    # model prefix: (input $/Mtok, output $/Mtok)
-    "jev": (0.042, 0.0),
-    "gpt-4.1-nano": (0.10, 0.40),
-    "gpt-4.1-mini": (0.40, 1.60),
-    "gpt-5-nano": (0.05, 0.40),
-    "gpt-5.4-nano": (0.05, 0.40),
+
+@dataclass(frozen=True)
+class Rate:
+    """Dollars per million tokens."""
+
+    input_per_mtok: float
+    output_per_mtok: float
+    verified: bool = False
+
+
+RATES: dict[str, Rate] = {
+    "jev": Rate(0.042, 0.0, verified=True),
+    "gpt-5.4-nano": Rate(0.20, 1.25, verified=True),
+    "gpt-5.4-mini": Rate(0.75, 4.50, verified=True),
+    "gpt-4.1-nano": Rate(0.10, 0.40, verified=True),
+    "gpt-4.1-mini": Rate(0.40, 1.60, verified=True),
 }
 
 
-def cost_usd(model: str, input_tokens: int | None, output_tokens: int | None) -> float | None:
-    """Cost of one call, or None if we have no published rate for the model."""
-    for prefix, (rate_in, rate_out) in RATES_PER_MTOK.items():
-        if model.startswith(prefix):
-            return ((input_tokens or 0) * rate_in + (output_tokens or 0) * rate_out) / 1_000_000
-    return None
+@dataclass(frozen=True)
+class Cost:
+    """A call's cost, split the way Arize AX wants it on a span."""
+
+    prompt: float
+    completion: float
+
+    @property
+    def total(self) -> float:
+        return self.prompt + self.completion
+
+
+def cost_of(model: str, input_tokens: int | None, output_tokens: int | None) -> Cost | None:
+    """Cost of one call, or None if we have no published rate for the model.
+
+    Returned split rather than summed because Arize AX reads `llm.cost.prompt` and
+    `llm.cost.completion` separately. Emitting the split is what makes "output is free"
+    visible in the trace instead of hidden inside a total.
+    """
+    rate = next((r for prefix, r in RATES.items() if model.startswith(prefix)), None)
+    if rate is None:
+        return None
+    return Cost(
+        prompt=(input_tokens or 0) * rate.input_per_mtok / 1_000_000,
+        completion=(output_tokens or 0) * rate.output_per_mtok / 1_000_000,
+    )

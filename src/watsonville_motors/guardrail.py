@@ -33,13 +33,14 @@ from .engines import (
     DEFAULT_LLM_MODEL,
     Answer,
     Choice,
+    Cost,
     Engine,
     JevEngine,
     LlmEngine,
     Noul,
     Score,
     Spec,
-    cost_usd,
+    cost_of,
 )
 from .policy import PRICING_POLICY, Vehicle
 from .tracing import get_tracer
@@ -79,7 +80,7 @@ class Verdict:
     latency_ms: float = 0.0
     input_tokens: int = 0
     output_tokens: int = 0
-    cost_usd: float | None = None
+    cost: Cost | None = None
     request_id: str | None = None
 
     @property
@@ -205,6 +206,9 @@ def _record(span: Any, verdict: Verdict) -> Verdict:
     span.set_attribute(SpanAttributes.LLM_MODEL_NAME, verdict.model)
     span.set_attribute(SpanAttributes.LLM_TOKEN_COUNT_PROMPT, verdict.input_tokens)
     span.set_attribute(SpanAttributes.LLM_TOKEN_COUNT_COMPLETION, verdict.output_tokens)
+    span.set_attribute(
+        SpanAttributes.LLM_TOKEN_COUNT_TOTAL, verdict.input_tokens + verdict.output_tokens
+    )
     span.set_attribute("guardrail.check", verdict.check)
     span.set_attribute("guardrail.engine", verdict.mode.value)
     span.set_attribute("guardrail.decision", verdict.decision.value)
@@ -212,8 +216,15 @@ def _record(span: Any, verdict: Verdict) -> Verdict:
     span.set_attribute("guardrail.latency_ms", verdict.latency_ms)
     if verdict.safe_reason:
         span.set_attribute("guardrail.reason_shown_to_model", verdict.safe_reason)
-    if verdict.cost_usd is not None:
-        span.set_attribute(SpanAttributes.LLM_COST_TOTAL, verdict.cost_usd)
+    if verdict.cost is not None:
+        # AX uses client-set cost attributes as-is, and only falls back to its own
+        # per-model rate lookup when they are absent. Setting all three means the demo
+        # needs no cost configuration in AX -- which matters for TypeSafe, since AX has no
+        # default rates for a provider it has never seen. Splitting prompt from completion
+        # is what makes "output tokens are free" legible in the trace.
+        span.set_attribute(SpanAttributes.LLM_COST_PROMPT, verdict.cost.prompt)
+        span.set_attribute(SpanAttributes.LLM_COST_COMPLETION, verdict.cost.completion)
+        span.set_attribute(SpanAttributes.LLM_COST_TOTAL, verdict.cost.total)
     if verdict.request_id:
         span.set_attribute("guardrail.request_id", verdict.request_id)
     for name, signal in verdict.signals.items():
@@ -286,7 +297,7 @@ class Guardrail:
                     latency_ms=result.latency_ms,
                     input_tokens=result.input_tokens or 0,
                     output_tokens=result.output_tokens or 0,
-                    cost_usd=cost_usd(result.model, result.input_tokens, result.output_tokens),
+                    cost=cost_of(result.model, result.input_tokens, result.output_tokens),
                     request_id=result.request_id,
                 ),
             )

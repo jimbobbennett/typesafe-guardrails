@@ -65,7 +65,7 @@ def _render(verdict: Verdict) -> str:
         suffix = f" · confidence {confidence:.2f}" if isinstance(confidence, float) else ""
         lines.append(f"- **{name}**: {headline}{suffix}")
         lines += [f"    - {label}: {p}" for label, p in (signal.get("probabilities") or {}).items()]
-    cost = f" · `${verdict.cost_usd:.6f}`" if verdict.cost_usd is not None else ""
+    cost = f" · `${verdict.cost.total:.6f}`" if verdict.cost is not None else ""
     footer = (
         f"`{verdict.model}` · `{verdict.latency_ms:.0f}ms` · "
         f"`{verdict.input_tokens} in / {verdict.output_tokens} out`{cost}"

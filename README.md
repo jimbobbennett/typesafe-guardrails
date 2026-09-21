@@ -190,26 +190,39 @@ thing that changes is the engine. Switch between them in Settings and read the f
 each step:
 
 ```output
-jev-1.13.0    ·  187ms  ·  694 in / 79 out   ·  $0.000029
-gpt-5.4-nano  · 1700ms  ·  961 in / 206 out  ·  $0.000100
+jev-1.13.0    ·  183ms  ·  576 in /  68 out  ·  $0.000024
+gpt-5.4-nano  · 2420ms  ·  841 in / 122 out  ·  $0.000321
 ```
 
-Measured over full conversations, TypeSafe came out **15 to 18x faster per call** and **3 to
-4x cheaper**, at identical decisions (5/5 and 7/7 boundary agreement on the two attack
+Measured over full conversations, TypeSafe came out **15 to 18x faster per call** and **12
+to 14x cheaper**, at identical decisions (5/5 and 7/7 boundary agreement on the two attack
 sequences above). The guardrail runs on every message, every reply and every tool call, so
 per-call latency gets added straight onto what your customer is waiting for.
 
-The LLM baseline isn't a strawman. It's the smallest, fastest model from the same provider
-that powers the agent, called via structured outputs. `gpt-5.4-nano` was picked by
-benchmarking, not a hunch. It beat `gpt-4.1-nano` on speed, cost *and* accuracy
-(`gpt-4.1-nano` scored `claims_binding` at 0.1 on a reply that said, verbatim, "that's a
-legally binding offer").
+The cost gap is structural rather than a pricing quirk, and the split on each span shows
+why. TypeSafe charges $0.042 per million input tokens and nothing at all for output.
+`gpt-5.4-nano` charges $0.20 input and **$1.25 output**. On a single inbound check that
+puts its completion cost ($0.000153 for 122 tokens) almost level with its prompt cost
+($0.000168 for 841 tokens) - output bills at 6.25x input, so a seventh of the tokens costs
+nearly as much. A guardrail emits structured output on every call, which parks it
+permanently on the expensive side of that ratio. TypeSafe's completion line is zero.
 
-Two caveats. The agent is an LLM too, so no two runs see word-for-word identical replies,
-which means the agreement numbers are indicative rather than a controlled measurement. And
-the prices come from a rate table in
-[`engines.py`](src/watsonville_motors/engines.py) that you should check against each
-provider's pricing page before quoting a figure from here.
+The LLM baseline isn't a strawman. It's a small, fast model from the same provider that
+powers the agent, called via structured outputs, and it was picked by benchmarking rather
+than a hunch. `gpt-4.1-nano` is the cheaper option, and it failed the job: it scored
+`claims_binding` at **0.1** on a reply that said, verbatim, "that's a legally binding
+offer". `gpt-5.4-nano` answered 0.95 and was also slightly faster, so it became the
+baseline despite costing 2.6x more per call. In other words the baseline here is the
+*pricier* of the two candidates, chosen for being the one that actually works.
+
+One caveat worth stating plainly: the agent is an LLM too, so no two runs see
+word-for-word identical replies, which means the agreement numbers are indicative rather
+than a controlled measurement. A real catch-rate and false-positive pair needs a fixed
+corpus of replies scored by both engines, which this repo does not include.
+
+Rates live in [`engines.py`](src/watsonville_motors/engines.py) and were all checked
+against the vendors' own pricing pages on 2026-09-21. Cached-input discounts exist for the
+OpenAI models but aren't modelled, since these calls are short, varied and uncached.
 
 ## Tracing
 
