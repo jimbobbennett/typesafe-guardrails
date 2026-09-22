@@ -6,22 +6,22 @@ no takesies backsies."* [The tweet](https://x.com/ChrisJBakke/status/17365333088
 went everywhere, and it's the clearest example of why you can't just put a chatbot in front
 of your business.
 
-This repo rebuilds that dealership chatbot so you can reproduce the jailbreak yourself, then
-watch a guardrail stop it cold. It uses [TypeSafe](https://typesafe.ai) System One as the
-guardrail, the [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/) for the
-agent, and [Arize AX](https://arize.com) to trace every decision so you can see exactly what
-happened and why.
+This repo rebuilds that dealership chatbot so you can reproduce the jailbreak yourself,
+then watch a guardrail stop it cold. The guardrail is Jev, the System One model from
+[TypeSafe](https://typesafe.ai). The agent is built with the
+[OpenAI Agents SDK](https://openai.github.io/openai-agents-python/), and every decision is
+traced to [Arize AX](https://arize.com) so you can see exactly what happened and why.
 
 It's one chat window with one setting that matters: **which engine guards the agent**.
 
 | Engine | What it does |
 |---|---|
 | **No guardrail** | Nothing screens anything. This is the 2023 incident, live. |
-| **TypeSafe System One** | Every boundary screened by `jev-latest`. About 110ms per check. |
+| **TypeSafe System One** | Every boundary screened by Jev (`jev-latest`). About 110ms per check. |
 | **LLM-as-judge** | The *same questions*, asked of `gpt-5.4-nano`. About 1900ms per check. |
 
 Switching engines keeps the conversation going, so you can jailbreak the agent with no
-guardrail, flip to TypeSafe, and fire the same message again to watch it bounce.
+guardrail, flip to Jev, and fire the same message again to watch it bounce.
 
 ## Setup
 
@@ -185,27 +185,27 @@ leaves the number out. Anything the model is told, it may repeat.
 
 ## Comparing the engines
 
-`jev` and `llm` share the same check specs, thresholds and decision functions. The only
-thing that changes is the engine. Switch between them in Settings and read the footer on
-each step:
+The Jev and LLM engines share the same check specs, thresholds and decision functions.
+The only thing that changes is the engine. Switch between them in Settings and read the
+footer on each step:
 
 ```output
 jev-1.13.0    ·  183ms  ·  576 in /  68 out  ·  $0.000024
 gpt-5.4-nano  · 2420ms  ·  841 in / 122 out  ·  $0.000321
 ```
 
-Measured over full conversations, TypeSafe came out **15 to 18x faster per call** and **12
+Measured over full conversations, Jev came out **15 to 18x faster per call** and **12
 to 14x cheaper**, at identical decisions (5/5 and 7/7 boundary agreement on the two attack
 sequences above). The guardrail runs on every message, every reply and every tool call, so
 per-call latency gets added straight onto what your customer is waiting for.
 
 The cost gap is structural rather than a pricing quirk, and the split on each span shows
-why. TypeSafe charges $0.042 per million input tokens and nothing at all for output.
+why. Jev charges $0.042 per million input tokens and nothing at all for output.
 `gpt-5.4-nano` charges $0.20 input and **$1.25 output**. On a single inbound check that
 puts its completion cost ($0.000153 for 122 tokens) almost level with its prompt cost
 ($0.000168 for 841 tokens) - output bills at 6.25x input, so a seventh of the tokens costs
 nearly as much. A guardrail emits structured output on every call, which parks it
-permanently on the expensive side of that ratio. TypeSafe's completion line is zero.
+permanently on the expensive side of that ratio. Jev's completion line is zero.
 
 The LLM baseline isn't a strawman. It's a small, fast model from the same provider that
 powers the agent, called via structured outputs, and it was picked by benchmarking rather
